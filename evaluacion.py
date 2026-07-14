@@ -5,7 +5,7 @@ import uuid
 # Configuración de la página
 st.set_page_config(page_title="Evaluador de Automatizaciones", layout="centered")
 
-st.title("🤖 Evaluador de Viabilidad de Automatizaciones")
+st.title("🤖 Evaluador ")
 st.write("Introduce los detalles de tu tarea manual para determinar si es viable pasar al flujo de desarrollo.")
 
 st.markdown("---")
