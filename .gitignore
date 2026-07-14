@@ -216,3 +216,29 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Entorno Virtual (¡SÚPER IMPORTANTE!) ---
+# Esto evita subir las carpetas de librerías instaladas en tu WSL/Windows
+venv/
+.venv/
+env/
+ENV/
+
+# --- Caché de Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# --- Configuración local de Streamlit ---
+.streamlit/secrets.toml
+
+# --- Archivos de Base de Datos / Excel locales ---
+*.xlsx
+*.xls
+*.csv
+
+# --- Archivos del Sistema Operativo ---
+.DS_Store
+Thumbs.db
