@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import uuid
 
 # Configuración de la página
 st.set_page_config(page_title="Evaluador de Automatizaciones", layout="centered")
@@ -38,15 +39,14 @@ with st.expander("🛠️ Campos Técnicos Avanzados (Opcionales para el usuario
 
 st.markdown("---")
 
-### 3. ENVÍO DE DATOS A LA API DE APPSHEET
+### 3. CONFIGURACIÓN Y ENVÍO A LA API DE APPSHEET
 
-# Recuperar credenciales de forma segura desde los secrets
+# Recuperar tokens de acceso seguros desde los Secrets de Streamlit
 APP_ID = st.secrets["APPSHEET_APP_ID"]
 ACCESS_KEY = st.secrets["APPSHEET_ACCESS_KEY"]
 
 def guardar_en_appsheet(estatus):
-    # AppSheet requiere el nombre exacto de la tabla conectada (usualmente el nombre de la pestaña o archivo)
-    # AJUSTA ESTE NOMBRE si en tu AppSheet la tabla se llama diferente
+    # Nombre de la tabla tal cual está registrada en tu entorno de AppSheet
     NOMBRE_TABLA_APPSHEET = "Inventario Automatización" 
     
     url = f"https://api.appsheet.com/api/v1/apps/{APP_ID}/tables/{NOMBRE_TABLA_APPSHEET}/Action"
@@ -56,7 +56,10 @@ def guardar_en_appsheet(estatus):
         "Content-Type": "application/json"
     }
     
-    # El cuerpo (Payload) estructurado bajo el estricto formato de la API de AppSheet
+    # Genera un identificador de 8 caracteres por si tu columna llave es requerida
+    id_unico = str(uuid.uuid4())[:8]
+    
+    # Formato e inyección de propiedades estrictas de AppSheet
     payload = {
         "Action": "Add",
         "Properties": {
@@ -65,7 +68,7 @@ def guardar_en_appsheet(estatus):
         },
         "Rows": [
             {
-                # Asegúrate de usar los nombres de columnas EXACTOS de tu base de datos
+                "ID": id_unico,
                 "Categoría": categoria,
                 "Tarea": tarea[:20],
                 "Tipo/Origen": tipo_origen,
@@ -85,12 +88,13 @@ def guardar_en_appsheet(estatus):
             response = requests.post(url, json=payload, headers=headers)
             if response.status_code == 200:
                 st.success(f"✅ ¡Datos procesados por AppSheet exitosamente bajo el estatus: **{estatus}**!")
+                st.info("ℹ️ Nota: Debido al proceso interno de sincronización, la fila puede tardar un par de minutos en verse reflejada en el Excel de Drive.")
             else:
                 st.error(f"❌ Error al guardar en AppSheet: {response.status_code} - {response.text}")
         except Exception as e:
             st.error(f"❌ Error de conexión con AppSheet: {e}")
 
-# Diálogo de rechazo por ROI
+# Diálogo emergente para solicitudes que no cumplen con el ROI mínimo
 @st.dialog("⚠️ Solicitud retenida por Retorno de Inversión (ROI)")
 def mostrar_popup_rechazo(veces_ano, horas_ano):
     st.write(f"### Hola. Analizamos la viabilidad de la tarea: **{tarea}**")
@@ -115,7 +119,7 @@ if st.button("🚀 Evaluar Automatización", type="primary"):
     if not tarea.strip() or not documentacion.strip():
         st.error("❌ Por favor, llena los campos obligatorios: **Nombre de la tarea** y **Documentación paso a paso**.")
     else:
-        # Algoritmo de viabilidad
+        # Algoritmo de cálculo de viabilidad por horas
         equivalencia_anual = {"Diario": 240, "Semanal": 52, "Quincenal": 24, "Mensual": 12}
         veces_al_ano = equivalencia_anual[frecuencia]
         horas_al_ano = (duracion * veces_al_ano) / 60
