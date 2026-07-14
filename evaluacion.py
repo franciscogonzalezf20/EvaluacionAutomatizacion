@@ -1,6 +1,5 @@
 import streamlit as st
-import pandas as pd
-from streamlit_gsheets import GSheetsConnection  # <--- Nueva librería para Google Sheets
+import requests  # <-- Librería estándar de Python para mandar solicitudes web
 
 # Configuración de la página
 st.set_page_config(page_title="Evaluador de Automatizaciones", layout="centered")
@@ -10,7 +9,7 @@ st.write("Introduce los detalles de tu tarea manual para determinar si es viable
 
 st.markdown("---")
 
-### 1. FORMULARIO PARA EL USUARIO COMPAÑERO (Campos Obligatorios)
+### 1. FORMULARIO PARA EL USUARIO
 st.subheader("📝 Datos Obligatorios de la Tarea")
 
 tarea = st.text_input("Nombre de la Tarea (Máximo 20 caracteres):", max_chars=20)
@@ -39,47 +38,38 @@ with st.expander("🛠️ Campos Técnicos Avanzados (Opcionales para el usuario
 
 st.markdown("---")
 
-### 3. LÓGICA DE CONEXIÓN Y GUARDADO EN GOOGLE SHEETS
+### 3. ENVÍO DE DATOS A GOOGLE SHEETS VIA WEB APP
 
-# Inicializar la conexión con Google Sheets usando los secrets ocultos
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Obtener de forma segura la URL de la Web App desde los Secrets
+APPS_SCRIPT_URL = st.secrets["APPS_SCRIPT_URL"]
 
 def guardar_en_sheets(estatus):
-    try:
-        # 1. Leer los datos actuales del Google Sheet
-        df_actual = conn.read()
-    except Exception:
-        # Si la hoja está completamente vacía, estructuramos las columnas
-        df_actual = pd.DataFrame(columns=[
-            "ID", "Categoría", "Tarea", "Tipo/Origen", "Servicio", 
-            "Duración Aprox (Minutos)", "Frecuencia", "Criticidad", 
-            "Documentación / Paso a Paso", "Registro de Adelanto", "Estatus Revisión"
-        ])
-    
-    nuevo_id = len(df_actual) + 1
-    
-    nuevo_registro = {
-        "ID": nuevo_id,
-        "Categoría": categoria,
-        "Tarea": tarea[:20],
-        "Tipo/Origen": tipo_origen,
-        "Servicio": servicio[:15] if servicio else "N/A",
-        "Duración Aprox (Minutos)": duracion,
-        "Frecuencia": frecuencia,
-        "Criticidad": criticidad,
-        "Documentación / Paso a Paso": documentacion,
-        "Registro de Adelanto": adelanto if adelanto else "Ninguno",
-        "Estatus Revisión": estatus
+    # Formatear los datos en un JSON limpio para enviarlo
+    payload = {
+        "categoria": categoria,
+        "tarea": tarea[:20],
+        "tipo_origen": tipo_origen,
+        "servicio": servicio[:15] if servicio else "N/A",
+        "duracion": duracion,
+        "frecuencia": frecuencia,
+        "criticidad": criticidad,
+        "documentacion": documentacion,
+        "adelanto": adelanto if adelanto else "Ninguno",
+        "estatus": estatus
     }
     
-    # 2. Agregar el nuevo registro
-    df_actual = pd.concat([df_actual, pd.DataFrame([nuevo_registro])], ignore_index=True)
-    
-    # 3. Reescribir el Google Sheet en la nube de forma segura
-    conn.update(data=df_actual)
-    st.success(f"✅ ¡Datos guardados exitosamente en Google Sheets bajo el estatus: **{estatus}**!")
+    with st.spinner("Guardando registro en la base de datos..."):
+        try:
+            # Enviar la solicitud POST a nuestra Web App de Google Sheets que maneja el Excel
+            response = requests.post(APPS_SCRIPT_URL, json=payload)
+            if response.status_code == 200:
+                st.success(f"✅ ¡Datos guardados exitosamente bajo el estatus: **{estatus}**!")
+            else:
+                st.error(f"❌ Error al guardar: El servidor de Google respondió con código {response.status_code}")
+        except Exception as e:
+            st.error(f"❌ Error de red al intentar conectar con Google Sheets: {e}")
 
-# Diálogo/Popup para cuando NO cumple los requisitos
+# Diálogo de rechazo por ROI
 @st.dialog("⚠️ Solicitud retenida por Retorno de Inversión (ROI)")
 def mostrar_popup_rechazo(veces_ano, horas_ano):
     st.write(f"### Hola. Analizamos la viabilidad de la tarea: **{tarea}**")
