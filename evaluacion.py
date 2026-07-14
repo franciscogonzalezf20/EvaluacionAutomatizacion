@@ -57,10 +57,9 @@ def guardar_en_appsheet(estatus):
         "Content-Type": "application/json"
     }
     
-    # Genera un ID numérico único progresivo usando la marca de tiempo (ej: 171563248)
+    # Genera un ID numérico único
     id_numerico = int(time.time())
     
-    # Formato con la estructura idéntica de columnas de tu AppSheet
     payload = {
         "Action": "Add",
         "Properties": {
@@ -84,10 +83,8 @@ def guardar_en_appsheet(estatus):
         ]
     }
     
-    # --- SECCIÓN DE LOGS DE DIAGNÓSTICO EN STREAMLIT ---
     st.subheader("🔍 Diagnóstico de la Petición (Logs)")
     
-    # Mostrar lo que Python le va a mandar a AppSheet
     with st.status("Preparando y enviando datos...", expanded=True) as status:
         st.write("**1. URL de destino:**")
         st.code(url)
@@ -97,32 +94,32 @@ def guardar_en_appsheet(estatus):
         
         try:
             response = requests.post(url, json=payload, headers=headers)
-            
             st.write(f"**3. Código de respuesta HTTP:** `{response.status_code}`")
             
-            # Intentar decodificar la respuesta de AppSheet como JSON para leer el error real
             try:
                 respuesta_json = response.json()
                 st.write("**4. Respuesta detallada de AppSheet (JSON):**")
                 st.json(respuesta_json)
                 
-                # AppSheet suele devolver un JSON vacío o una lista con errores adentro
-                # si falló la validación interna de columnas.
+                # VALIDACIÓN CRUCIAL: Verificar si AppSheet aceptó la fila internamente
+                exito_interno = respuesta_json.get("Success", False)
             except Exception:
                 st.write("**4. Respuesta cruda de la API (Texto):**")
                 st.code(response.text)
+                exito_interno = False
                 
-            if response.status_code == 200:
-                status.update(label="¡Proceso de API finalizado!", state="complete", expanded=True)
+            if response.status_code == 200 and exito_interno:
+                status.update(label="¡Proceso de API finalizado con éxito!", state="complete", expanded=True)
                 st.success(f"✅ ¡Datos procesados por AppSheet bajo el estatus: **{estatus}**!")
             else:
-                status.update(label="Error en la API de AppSheet", state="error", expanded=True)
-                st.error(f"❌ Error al guardar en AppSheet: {response.status_code}")
+                status.update(label="Rechazado por las políticas de AppSheet", state="error", expanded=True)
+                st.error("❌ AppSheet rechazó la inserción debido a restricciones de seguridad de la cuenta corporativa.")
                 
         except Exception as e:
             status.update(label="Fallo de conexión", state="error", expanded=True)
             st.error(f"❌ Error de conexión con AppSheet: {e}")
 
+            
 # Diálogo emergente para solicitudes que no cumplen con el ROI mínimo
 @st.dialog("⚠️ Solicitud retenida por Retorno de Inversión (ROI)")
 def mostrar_popup_rechazo(veces_ano, horas_ano):
