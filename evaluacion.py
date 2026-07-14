@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import time
+import json
 
 # Configuración de la página
 st.set_page_config(page_title="Evaluador de Automatizaciones", layout="centered")
@@ -57,7 +58,6 @@ def guardar_en_appsheet(estatus):
     }
     
     # Genera un ID numérico único progresivo usando la marca de tiempo (ej: 171563248)
-    # Esto cumple con el requisito de que "ID" sea de tipo Number y KEY en AppSheet
     id_numerico = int(time.time())
     
     # Formato con la estructura idéntica de columnas de tu AppSheet
@@ -84,15 +84,43 @@ def guardar_en_appsheet(estatus):
         ]
     }
     
-    with st.spinner("Conectando con AppSheet..."):
+    # --- SECCIÓN DE LOGS DE DIAGNÓSTICO EN STREAMLIT ---
+    st.subheader("🔍 Diagnóstico de la Petición (Logs)")
+    
+    # Mostrar lo que Python le va a mandar a AppSheet
+    with st.status("Preparando y enviando datos...", expanded=True) as status:
+        st.write("**1. URL de destino:**")
+        st.code(url)
+        
+        st.write("**2. Datos enviados (Payload):**")
+        st.json(payload)
+        
         try:
             response = requests.post(url, json=payload, headers=headers)
+            
+            st.write(f"**3. Código de respuesta HTTP:** `{response.status_code}`")
+            
+            # Intentar decodificar la respuesta de AppSheet como JSON para leer el error real
+            try:
+                respuesta_json = response.json()
+                st.write("**4. Respuesta detallada de AppSheet (JSON):**")
+                st.json(respuesta_json)
+                
+                # AppSheet suele devolver un JSON vacío o una lista con errores adentro
+                # si falló la validación interna de columnas.
+            except Exception:
+                st.write("**4. Respuesta cruda de la API (Texto):**")
+                st.code(response.text)
+                
             if response.status_code == 200:
-                st.success(f"✅ ¡Datos procesados por AppSheet exitosamente bajo el estatus: **{estatus}**!")
-                st.info("ℹ️ Nota: Debido al proceso de sincronización de Google Drive, la fila puede tardar un par de minutos en reflejarse en tu Excel.")
+                status.update(label="¡Proceso de API finalizado!", state="complete", expanded=True)
+                st.success(f"✅ ¡Datos procesados por AppSheet bajo el estatus: **{estatus}**!")
             else:
-                st.error(f"❌ Error al guardar en AppSheet: {response.status_code} - {response.text}")
+                status.update(label="Error en la API de AppSheet", state="error", expanded=True)
+                st.error(f"❌ Error al guardar en AppSheet: {response.status_code}")
+                
         except Exception as e:
+            status.update(label="Fallo de conexión", state="error", expanded=True)
             st.error(f"❌ Error de conexión con AppSheet: {e}")
 
 # Diálogo emergente para solicitudes que no cumplen con el ROI mínimo
@@ -113,7 +141,8 @@ def mostrar_popup_rechazo(veces_ano, horas_ano):
     st.markdown("---")
     if st.button("Sí, mandar a revisión manual de todos modos"):
         guardar_en_appsheet("Para Revisión (Forzado por usuario)")
-        st.rerun()
+        # Quitamos st.rerun() temporalmente para poder leer los logs en pantalla sin que se borren
+        # st.rerun() 
 
 # Botón Principal de Evaluación
 if st.button("🚀 Evaluar Automatización", type="primary"):
