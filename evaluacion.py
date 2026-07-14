@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-import uuid
+import time
 
 # Configuración de la página
 st.set_page_config(page_title="Evaluador de Automatizaciones", layout="centered")
@@ -46,7 +46,7 @@ APP_ID = st.secrets["APPSHEET_APP_ID"]
 ACCESS_KEY = st.secrets["APPSHEET_ACCESS_KEY"]
 
 def guardar_en_appsheet(estatus):
-    # Nombre de la tabla tal cual está registrada en tu entorno de AppSheet
+    # Nombre de la tabla registrado en tu AppSheet
     NOMBRE_TABLA_APPSHEET = "Inventario Automatización" 
     
     url = f"https://api.appsheet.com/api/v1/apps/{APP_ID}/tables/{NOMBRE_TABLA_APPSHEET}/Action"
@@ -56,10 +56,11 @@ def guardar_en_appsheet(estatus):
         "Content-Type": "application/json"
     }
     
-    # Genera un identificador de 8 caracteres por si tu columna llave es requerida
-    id_unico = str(uuid.uuid4())[:8]
+    # Genera un ID numérico único progresivo usando la marca de tiempo (ej: 171563248)
+    # Esto cumple con el requisito de que "ID" sea de tipo Number y KEY en AppSheet
+    id_numerico = int(time.time())
     
-    # Formato e inyección de propiedades estrictas de AppSheet
+    # Formato con la estructura idéntica de columnas de tu AppSheet
     payload = {
         "Action": "Add",
         "Properties": {
@@ -68,7 +69,7 @@ def guardar_en_appsheet(estatus):
         },
         "Rows": [
             {
-                "ID": id_unico,
+                "ID": id_numerico,
                 "Categoría": categoria,
                 "Tarea": tarea[:20],
                 "Tipo/Origen": tipo_origen,
@@ -88,7 +89,7 @@ def guardar_en_appsheet(estatus):
             response = requests.post(url, json=payload, headers=headers)
             if response.status_code == 200:
                 st.success(f"✅ ¡Datos procesados por AppSheet exitosamente bajo el estatus: **{estatus}**!")
-                st.info("ℹ️ Nota: Debido al proceso interno de sincronización, la fila puede tardar un par de minutos en verse reflejada en el Excel de Drive.")
+                st.info("ℹ️ Nota: Debido al proceso de sincronización de Google Drive, la fila puede tardar un par de minutos en reflejarse en tu Excel.")
             else:
                 st.error(f"❌ Error al guardar en AppSheet: {response.status_code} - {response.text}")
         except Exception as e:
