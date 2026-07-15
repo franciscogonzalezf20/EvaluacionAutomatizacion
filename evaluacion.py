@@ -47,9 +47,9 @@ def guardar_en_google_sheets(estatus):
             # 1. Establecer conexión usando las credenciales de los Secrets
             conn = st.connection("gsheets", type=GSheetsConnection)
             
-            # 2. Leer los datos actuales para no sobreescribir y poder calcular el siguiente ID
-            # Ponemos ttl=0 para asegurar que lea el Excel en tiempo real sin caché
-            df_actual = conn.read(ttl=0)
+            # 2. Leer los datos actuales especificando la pestaña (worksheet)
+            # Cambia "Sheet1" si tu pestaña se llama diferente (ej: "Hoja 1")
+            df_actual = conn.read(worksheet="Sheet1", ttl=0)
             
             # Determinar el siguiente ID (numérico correlativo)
             if not df_actual.empty and "ID" in df_actual.columns:
@@ -76,15 +76,18 @@ def guardar_en_google_sheets(estatus):
             # 4. Concatenar la nueva fila al DataFrame original
             df_actualizado = pd.concat([df_actual, nueva_fila], ignore_index=True)
             
-            # 5. Reescribir el documento de Google Sheets con la nueva información actualizada
-            conn.update(data=df_actualizado)
+            # 5. Reescribir el documento de Google Sheets en la pestaña correcta
+            conn.update(worksheet="Sheet1", data=df_actualizado)
             
             st.success(f"✅ ¡Datos guardados exitosamente en el Excel bajo el estatus: **{estatus}**!")
             
         except Exception as e:
             st.error(f"❌ Error al interactuar con Google Sheets: {e}")
-            st.info("Revisa que el JSON de tu service account esté bien copiado en los Secrets de Streamlit.")
+            # Esto nos mostrará el detalle técnico del error de Google
+            st.warning("Detalles técnicos del error para depuración:")
+            st.exception(e)
 
+            
 # Diálogo emergente para solicitudes que no cumplen con el ROI mínimo
 @st.dialog("⚠️ Solicitud retenida por Retorno de Inversión (ROI)")
 def mostrar_popup_rechazo(veces_ano, horas_ano):
