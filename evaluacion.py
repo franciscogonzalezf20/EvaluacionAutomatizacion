@@ -1,7 +1,7 @@
 import streamlit as st
-import requests
+import pandas as pd
 import time
-import json
+from streamlit_gsheets import GSheetsConnection # Conector oficial de Streamlit
 
 # Configuración de la página
 st.set_page_config(page_title="Evaluador de Automatizaciones", layout="centered")
@@ -40,35 +40,27 @@ with st.expander("🛠️ Campos Técnicos Avanzados (Opcionales para el usuario
 
 st.markdown("---")
 
-### 3. CONFIGURACIÓN Y ENVÍO A LA API DE APPSHEET
+### 3. FUNCIÓN PARA ESCRIBIR DIRECTO EN GOOGLE SHEETS
+def guardar_en_google_sheets(estatus):
+    with st.spinner("Conectando con Google Sheets e insertando registro..."):
+        try:
+            # 1. Establecer conexión usando las credenciales de los Secrets
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            
+            # 2. Leer los datos actuales para no sobreescribir y poder calcular el siguiente ID
+            # Ponemos ttl=0 para asegurar que lea el Excel en tiempo real sin caché
+            df_actual = conn.read(ttl=0)
+            
+            # Determinar el siguiente ID (numérico correlativo)
+            if not df_actual.empty and "ID" in df_actual.columns:
+                ultimo_id = pd.to_numeric(df_actual["ID"], errors='coerce').max()
+                nuevo_id = int(ultimo_id + 1) if not pd.isna(ultimo_id) else 1
+            else:
+                nuevo_id = 1
 
-# Recuperar tokens de acceso seguros desde los Secrets de Streamlit
-APP_ID = st.secrets["APPSHEET_APP_ID"]
-ACCESS_KEY = st.secrets["APPSHEET_ACCESS_KEY"]
-
-def guardar_en_appsheet(estatus):
-    # Nombre de la tabla registrado en tu AppSheet
-    NOMBRE_TABLA_APPSHEET = "Inventario Automatización" 
-    
-    url = f"https://api.appsheet.com/api/v1/apps/{APP_ID}/tables/{NOMBRE_TABLA_APPSHEET}/Action"
-    
-    headers = {
-        "ApplicationAccessKey": ACCESS_KEY,
-        "Content-Type": "application/json"
-    }
-    
-    # Genera un ID numérico único
-    id_numerico = int(time.time())
-    
-    payload = {
-        "Action": "Add",
-        "Properties": {
-            "Locale": "es-MX",
-            "Timezone": "Central Standard Time"
-        },
-        "Rows": [
-            {
-                "ID": id_numerico,
+            # 3. Estructurar la nueva fila respetando idénticamente las columnas
+            nueva_fila = pd.DataFrame([{
+                "ID": nuevo_id,
                 "Categoría": categoria,
                 "Tarea": tarea[:20],
                 "Tipo/Origen": tipo_origen,
@@ -79,47 +71,20 @@ def guardar_en_appsheet(estatus):
                 "Documentación / Paso a Paso": documentacion,
                 "Registro de Adelanto": adelanto if adelanto else "Ninguno",
                 "Estatus Revisión": estatus
-            }
-        ]
-    }
-    
-    st.subheader("🔍 Diagnóstico de la Petición (Logs)")
-    
-    with st.status("Preparando y enviando datos...", expanded=True) as status:
-        st.write("**1. URL de destino:**")
-        st.code(url)
-        
-        st.write("**2. Datos enviados (Payload):**")
-        st.json(payload)
-        
-        try:
-            response = requests.post(url, json=payload, headers=headers)
-            st.write(f"**3. Código de respuesta HTTP:** `{response.status_code}`")
+            }])
             
-            try:
-                respuesta_json = response.json()
-                st.write("**4. Respuesta detallada de AppSheet (JSON):**")
-                st.json(respuesta_json)
-                
-                # VALIDACIÓN CRUCIAL: Verificar si AppSheet aceptó la fila internamente
-                exito_interno = respuesta_json.get("Success", False)
-            except Exception:
-                st.write("**4. Respuesta cruda de la API (Texto):**")
-                st.code(response.text)
-                exito_interno = False
-                
-            if response.status_code == 200 and exito_interno:
-                status.update(label="¡Proceso de API finalizado con éxito!", state="complete", expanded=True)
-                st.success(f"✅ ¡Datos procesados por AppSheet bajo el estatus: **{estatus}**!")
-            else:
-                status.update(label="Rechazado por las políticas de AppSheet", state="error", expanded=True)
-                st.error("❌ AppSheet rechazó la inserción debido a restricciones de seguridad de la cuenta corporativa.")
-                
+            # 4. Concatenar la nueva fila al DataFrame original
+            df_actualizado = pd.concat([df_actual, nueva_fila], ignore_index=True)
+            
+            # 5. Reescribir el documento de Google Sheets con la nueva información actualizada
+            conn.update(data=df_actualizado)
+            
+            st.success(f"✅ ¡Datos guardados exitosamente en el Excel bajo el estatus: **{estatus}**!")
+            
         except Exception as e:
-            status.update(label="Fallo de conexión", state="error", expanded=True)
-            st.error(f"❌ Error de conexión con AppSheet: {e}")
+            st.error(f"❌ Error al interactuar con Google Sheets: {e}")
+            st.info("Revisa que el JSON de tu service account esté bien copiado en los Secrets de Streamlit.")
 
-            
 # Diálogo emergente para solicitudes que no cumplen con el ROI mínimo
 @st.dialog("⚠️ Solicitud retenida por Retorno de Inversión (ROI)")
 def mostrar_popup_rechazo(veces_ano, horas_ano):
@@ -137,9 +102,7 @@ def mostrar_popup_rechazo(veces_ano, horas_ano):
     st.error(f"Tu proceso consume **{horas_ano:.2f} horas anuales** y su criticidad es **{criticidad}**.")
     st.markdown("---")
     if st.button("Sí, mandar a revisión manual de todos modos"):
-        guardar_en_appsheet("Para Revisión (Forzado por usuario)")
-        # Quitamos st.rerun() temporalmente para poder leer los logs en pantalla sin que se borren
-        # st.rerun() 
+        guardar_en_google_sheets("Para Revisión (Forzado por usuario)")
 
 # Botón Principal de Evaluación
 if st.button("🚀 Evaluar Automatización", type="primary"):
@@ -152,6 +115,6 @@ if st.button("🚀 Evaluar Automatización", type="primary"):
         horas_al_ano = (duracion * veces_al_ano) / 60
         
         if horas_al_ano >= 24.0 or criticidad == "Alta":
-            guardar_en_appsheet("Aprobado Automático (Viable)")
+            guardar_en_google_sheets("Aprobado Automático (Viable)")
         else:
             mostrar_popup_rechazo(veces_al_ano, horas_al_ano)
