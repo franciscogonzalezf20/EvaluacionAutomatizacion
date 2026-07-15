@@ -77,7 +77,7 @@ def guardar_en_google_sheets(estatus):
             df_actualizado = pd.concat([df_actual, nueva_fila], ignore_index=True)
             
             # 5. Reescribir el documento de Google Sheets en la pestaña correcta
-            conn.update(worksheet="Sheet1", data=df_actualizado)
+            conn.update(worksheet="Fuente", data=df_actualizado)
             
             st.success(f"✅ ¡Datos guardados exitosamente en el Excel bajo el estatus: **{estatus}**!")
             
